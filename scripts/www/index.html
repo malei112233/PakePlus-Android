@@ -1,0 +1,720 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>排班表</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='7' fill='%230f766e'/><path d='M9 9v14M16 9v14M23 9v14' stroke='%23fff' stroke-width='2.4' stroke-linecap='round'/></svg>">
+<style>
+:root{
+  --bg:#eff3f3; --card:#fff; --ink:#1d272a; --muted:#6c7b7f;
+  --line:#e4ebeb; --accent:#0f766e; --accent-soft:#d9efec; --warn:#b45309; --warn-soft:#fdf0dd;
+}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{margin:0;padding:0}
+body{
+  background:var(--bg); color:var(--ink);
+  font-family:system-ui,-apple-system,"PingFang SC","Noto Sans SC","Microsoft YaHei",sans-serif;
+  font-size:15px; line-height:1.5; padding-bottom:18px;
+}
+.topbar{
+  position:sticky; top:0; z-index:20; background:var(--card);
+  border-bottom:1px solid var(--line); padding:10px 12px 0;
+}
+.brandRow{display:flex; align-items:center; justify-content:space-between; gap:10px; min-width:0}
+.brand{font-weight:700; font-size:16px; letter-spacing:.5px}
+.monthNav{display:flex; align-items:center; gap:6px}
+.monthNav button{
+  border:1px solid var(--line); background:#fff; color:var(--ink);
+  width:32px; height:32px; border-radius:9px; font-size:16px; line-height:1;
+}
+.monthLabel{font-size:14px; font-weight:600; min-width:92px; text-align:center}
+.tabs{display:flex; gap:4px; margin-top:10px}
+.tab{
+  flex:1; border:0; background:transparent; color:var(--muted);
+  padding:9px 0 11px; font-size:15px; border-radius:10px 10px 0 0; font-weight:500;
+}
+.tab.on{color:var(--accent); font-weight:700; box-shadow:inset 0 -3px 0 var(--accent)}
+.view{display:none; padding:12px}
+.view.on{display:block}
+
+.hint{
+  background:var(--accent-soft); color:#0b5a54; font-size:13px;
+  padding:9px 11px; border-radius:10px; margin-bottom:10px; line-height:1.6;
+}
+.card{background:var(--card); border-radius:14px; padding:12px; margin-bottom:12px; box-shadow:0 1px 3px rgba(20,40,40,.06)}
+.cardT{font-weight:700; font-size:14px; margin-bottom:9px; display:flex; align-items:center; justify-content:space-between; gap:8px}
+.cardT span.sub{font-weight:400; font-size:12px; color:var(--muted)}
+
+.tableWrap{background:var(--card); border-radius:14px; overflow:auto; max-height:66vh; box-shadow:0 1px 3px rgba(20,40,40,.06); -webkit-overflow-scrolling:touch}
+table{border-collapse:separate; border-spacing:0; table-layout:fixed}
+thead th{
+  position:sticky; top:0; z-index:5; background:#e8f1f0; color:#0b5a54;
+  font-size:13px; font-weight:700; padding:9px 6px; border-bottom:1px solid #d5e4e2; text-align:center;
+  white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
+}
+th.dateCol{position:sticky; left:0; z-index:7}
+td.dateCol{
+  position:sticky; left:0; z-index:3; background:#fbfdfd;
+  border-right:1px solid var(--line); border-bottom:1px solid var(--line);
+  text-align:center; padding:6px 2px;
+}
+.dn{display:block; font-weight:700; font-size:15px; line-height:1.2}
+.dw{display:block; font-size:11px; color:var(--muted); margin-top:2px}
+tr.today td.dateCol{background:#dff2ef}
+tr.today .dn{color:var(--accent)}
+td.cell{
+  border-bottom:1px solid var(--line); border-right:1px solid #f1f5f5;
+  vertical-align:top; padding:6px 6px 7px; min-height:56px; cursor:pointer;
+}
+td.cell:active{background:#eaf5f4}
+.chip{
+  display:inline-block; background:var(--accent-soft); color:#0b5a54;
+  border-radius:7px; padding:2px 7px; font-size:12.5px; margin:0 3px 3px 0; white-space:nowrap;
+}
+.drv{font-size:11.5px; color:var(--warn); margin-top:2px}
+.ph{color:#b9c6c6; font-size:12.5px}
+th.offCol{background:#efeeea; color:#8b9696}
+.offMark{display:block; font-size:10px; font-weight:400; color:#b45309; margin-top:1px}
+td.cell.offCell{background:#fbfaf7}
+.tagItem.offTagItem{background:#faf7f0}
+.tagItem .restore{border:0;background:transparent;color:var(--accent);font-size:12.5px;padding:0 2px;font-weight:600}
+.footNote{font-size:12px; color:var(--muted); padding:10px 4px 0; line-height:1.6}
+
+/* modal */
+.mask{position:fixed; inset:0; z-index:50; background:rgba(12,26,26,.42); display:flex; align-items:flex-end}
+.mask[hidden]{display:none}
+.sheet{
+  background:#fff; width:100%; border-radius:18px 18px 0 0; padding:14px 14px calc(14px + env(safe-area-inset-bottom));
+  max-height:88vh; overflow:auto; animation:up .2s ease-out;
+}
+@keyframes up{from{transform:translateY(24px); opacity:.6}to{transform:none; opacity:1}}
+.sheetHead{display:flex; align-items:center; justify-content:space-between; gap:10px; margin-bottom:12px}
+.sheetHead b{font-size:16px}
+.x{border:0; background:#f1f4f4; color:var(--muted); border-radius:9px; padding:7px 12px; font-size:13.5px}
+.blk{margin-bottom:14px}
+.blkT{font-size:13px; font-weight:700; color:var(--muted); margin-bottom:8px; letter-spacing:.3px}
+.picks{display:flex; flex-wrap:wrap; gap:8px}
+.pbtn,.dbtn{
+  border:1.5px solid var(--line); background:#fff; color:var(--ink);
+  border-radius:11px; padding:9px 12px; font-size:14px; min-width:76px; text-align:center;
+}
+.pbtn.active,.dbtn.active{border-color:var(--accent); background:var(--accent-soft); color:#0b5a54; font-weight:700}
+.pbtn.dup{border-color:#f0c079; background:var(--warn-soft)}
+.dupTag{display:block; font-size:10.5px; color:var(--warn); font-weight:400; margin-top:2px}
+.sheetFoot{display:flex; gap:8px; margin-top:6px}
+.btn{flex:1; border:0; border-radius:12px; padding:12px 10px; font-size:15px; font-weight:700; background:var(--accent); color:#fff}
+.btn.ghost{background:#f1f4f4; color:var(--ink); font-weight:600; flex:0 0 auto; padding:12px 12px; font-size:13.5px}
+
+/* settings lists */
+.listRow{display:flex; flex-wrap:wrap; gap:8px; margin-bottom:10px}
+.tagItem{display:inline-flex; align-items:center; gap:6px; background:#f4f7f7; border-radius:10px; padding:7px 8px 7px 11px; font-size:14px}
+.tagItem button{border:0; background:transparent; color:#c0504d; font-size:17px; line-height:1; padding:0 2px}
+.addRow{display:flex; gap:8px}
+.addRow input{
+  flex:1; min-width:0; border:1px solid var(--line); border-radius:10px; padding:10px 11px; font-size:14px; background:#fbfdfd; color:var(--ink);
+}
+.addRow button{border:0; border-radius:10px; background:var(--accent); color:#fff; padding:0 15px; font-size:14px; font-weight:700}
+.smallBtn{border:1px solid var(--line); background:#fff; border-radius:10px; padding:9px 12px; font-size:13.5px; color:var(--ink)}
+.smallBtn.danger{color:#c0504d; border-color:#f0d6d5}
+
+/* stats */
+table.stat{width:100%; border-collapse:collapse; table-layout:fixed}
+table.stat th,table.stat td{border-bottom:1px solid var(--line); padding:9px 6px; font-size:13.5px; text-align:center}
+table.stat th{color:var(--muted); font-weight:600; font-size:12.5px; background:#f8fbfa}
+table.stat td:first-child,table.stat th:first-child{text-align:left; width:34%; font-weight:600}
+.empty{color:var(--muted); font-size:13.5px; padding:14px 4px; text-align:center}
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <div class="brandRow">
+    <div class="brand">排班表</div>
+    <div class="monthNav">
+      <button id="prevM" aria-label="上个月">‹</button>
+      <div class="monthLabel" id="monthLabel"></div>
+      <button id="nextM" aria-label="下个月">›</button>
+    </div>
+  </div>
+  <div class="tabs">
+    <button class="tab on" data-view="plan">排班</button>
+    <button class="tab" data-view="stat">统计</button>
+    <button class="tab" data-view="set">设置</button>
+  </div>
+</div>
+
+<!-- ===== 视图：排班 ===== -->
+<div class="view on" id="v-plan">
+  <div class="hint">点格子就能选人员：选好人点保存。同一天里，一个人只能出现在一个工作面，重复会在保存时提醒。</div>
+  <div class="tableWrap" id="tableWrap"></div>
+  <div class="footNote" id="planFoot"></div>
+</div>
+
+<!-- ===== 视图：统计 ===== -->
+<div class="view" id="v-stat">
+  <div class="card">
+    <div class="cardT">人员出勤<span class="sub" id="statMonth"></span></div>
+    <div id="statPeople"></div>
+  </div>
+  <div class="card">
+    <div class="cardT">司机出车</div>
+    <div id="statDrivers"></div>
+  </div>
+</div>
+
+<!-- ===== 视图：设置 ===== -->
+<div class="view" id="v-set">
+  <div class="card">
+    <div class="cardT">人员名单<span class="sub">可随时增删</span></div>
+    <div class="listRow" id="listPeople"></div>
+    <div class="addRow">
+      <input id="inPerson" placeholder="输入姓名，如 张三">
+      <button id="btnAddPerson">添加</button>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="cardT">司机名单<span class="sub">可随时增删</span></div>
+    <div class="listRow" id="listDrivers"></div>
+    <div class="addRow">
+      <input id="inDriver" placeholder="输入司机/车辆名称">
+      <button id="btnAddDriver">添加</button>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="cardT">作业内容（工作面）<span class="sub">对应表格的列</span></div>
+    <div class="listRow" id="listTasks"></div>
+    <div class="addRow">
+      <input id="inTask" placeholder="输入工作面名称">
+      <button id="btnAddTask">添加</button>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="cardT">导出<span class="sub">发群里用单日</span></div>
+    <div class="addRow" style="margin-bottom:8px">
+      <input type="date" id="expDate">
+      <button id="btnDayCsv">导出当天</button>
+    </div>
+    <div class="listRow" style="gap:8px">
+      <button class="smallBtn" id="btnDayText">复制当天安排文字</button>
+      <button class="smallBtn" id="btnCsv">导出当月 CSV</button>
+      <button class="smallBtn" id="btnBak">导出备份</button>
+      <button class="smallBtn" id="btnRestore">恢复备份</button>
+      <button class="smallBtn danger" id="btnClear">清空全部</button>
+    </div>
+    <input type="file" id="fileRestore" accept=".json,application/json" hidden>
+    <div class="footNote">所有数据只存在本机浏览器里，不上传、不需要联网。换手机前先导出备份，再在新手机上恢复。</div>
+  </div>
+</div>
+
+<div class="mask" id="mask" hidden>
+  <div class="sheet" role="dialog" aria-modal="true">
+    <div class="sheetHead">
+      <b id="mTitle">排班</b>
+      <button class="x" id="mClose">关闭</button>
+    </div>
+    <div class="blk">
+      <div class="blkT">人员（可多人）</div>
+      <div class="picks" id="mPeople"></div>
+    </div>
+    <div class="blk">
+      <div class="blkT">司机</div>
+      <div class="picks" id="mDrivers"></div>
+    </div>
+    <div class="sheetFoot">
+      <button class="btn ghost" id="mPrev">沿用前一天</button>
+      <button class="btn ghost" id="mClear">清空</button>
+      <button class="btn" id="mSave">保存</button>
+    </div>
+  </div>
+</div>
+
+<script>
+/* ====== 数据层 ====== */
+const LS_KEY = 'paiban_v1';
+const WEEK = ['日','一','二','三','四','五','六'];
+
+function defaultState(){
+  return {
+    people: ['马磊','胡高才','管红义','赵南杰','肖佳阳','李邵康','莫朝列','梁亮'],
+    drivers: ['唐换船','陈健星','厂家车'],
+    tasks: [
+      {id:'t1', name:'1号工作面'},
+      {id:'t2', name:'2号工作面'},
+      {id:'t3', name:'3号工作面'}
+    ],
+    data: {}
+  };
+}
+function loadState(){
+  try{
+    const raw = localStorage.getItem(LS_KEY);
+    if(raw){
+      const o = JSON.parse(raw);
+      o.people = o.people||[]; o.drivers = o.drivers||[]; o.tasks = o.tasks||[]; o.data = o.data||{};
+      return o;
+    }
+  }catch(e){}
+  return defaultState();
+}
+let S = loadState();
+function save(){ try{ localStorage.setItem(LS_KEY, JSON.stringify(S)); }catch(e){ alert('保存失败：浏览器禁用了本地存储'); } }
+
+const now = new Date();
+let curY = now.getFullYear();
+let curM = now.getMonth();
+
+const pad2 = n => n < 10 ? '0'+n : ''+n;
+const dkey = d => curY + '-' + pad2(curM+1) + '-' + pad2(d);
+const todayKey = () => { const t=new Date(); return t.getFullYear()+'-'+pad2(t.getMonth()+1)+'-'+pad2(t.getDate()); };
+const esc = s => String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+
+/* ====== 表格渲染 ====== */
+const tableWrap = document.getElementById('tableWrap');
+const planFoot = document.getElementById('planFoot');
+const monthLabel = document.getElementById('monthLabel');
+
+function renderTable(){
+  monthLabel.textContent = curY + '年' + (curM+1) + '月';
+  const days = new Date(curY, curM+1, 0).getDate();
+  const COL_D = 92, COL_T = 136;
+
+  let colg = '<col style="width:'+COL_D+'px">';
+  S.tasks.forEach(()=> colg += '<col style="width:'+COL_T+'px">');
+
+  let head = '<th class="dateCol">日期</th>';
+  S.tasks.forEach(t=> head += '<th' + (t.off ? ' class="offCol"' : '') + '>' + esc(t.name) + (t.off ? '<span class="offMark">已移除</span>' : '') + '</th>');
+
+  let body = '';
+  for(let d=1; d<=days; d++){
+    const k = dkey(d);
+    const dow = new Date(curY, curM, d).getDay();
+    const isToday = (k === todayKey());
+    let row = '<tr' + (isToday ? ' class="today"' : '') + '>';
+    row += '<td class="dateCol"><span class="dn">'+d+'</span><span class="dw">周'+WEEK[dow]+'</span></td>';
+    const dayData = S.data[k] || {};
+    S.tasks.forEach(t=>{
+      const rec = dayData[t.id] || {};
+      const ps = rec.p || [];
+      let inner = '';
+      if(ps.length) inner = ps.map(n=>'<span class="chip">'+esc(n)+'</span>').join('');
+      else inner = '<span class="ph">点选</span>';
+      if(rec.d) inner += '<div class="drv">司机 '+esc(rec.d)+'</div>';
+      row += '<td class="cell'+(t.off?' offCell':'')+'" data-k="'+k+'" data-t="'+t.id+'">'+inner+'</td>';
+    });
+    row += '</tr>';
+    body += row;
+  }
+
+  const totalW = COL_D + S.tasks.length * COL_T;
+  tableWrap.innerHTML =
+    '<table style="width:'+totalW+'px"><colgroup>'+colg+'</colgroup>'+
+    '<thead><tr>'+head+'</tr></thead><tbody>'+body+'</tbody></table>';
+
+  planFoot.textContent = S.tasks.length
+    ? '左右滑动看全部工作面 · 数据只存本机'
+    : '还没有作业内容，先在「设置」里添加工作面';
+}
+
+/* 点格子打开选择面板 */
+tableWrap.addEventListener('click', e=>{
+  const td = e.target.closest('td.cell');
+  if(td) openCell(td.dataset.k, td.dataset.t);
+});
+
+/* ====== 选择面板 ====== */
+const mask = document.getElementById('mask');
+const mTitle = document.getElementById('mTitle');
+const mPeople = document.getElementById('mPeople');
+const mDrivers = document.getElementById('mDrivers');
+let ctx = null;      // {k, tid}
+let dupMap = {};     // 当天其它工作面里已排的人员 -> 工作面名
+
+function openCell(k, tid){
+  const t = S.tasks.find(x=>x.id===tid);
+  const day = parseInt(k.split('-')[2], 10);
+  ctx = {k:k, tid:tid};
+  mTitle.textContent = (curM+1) + '月' + day + '日 · ' + (t ? t.name : '');
+
+  const rec = ((S.data[k]||{})[tid]) || {p:[], d:''};
+
+  dupMap = {};
+  const dd = S.data[k] || {};
+  Object.keys(dd).forEach(id=>{
+    if(id === tid) return;
+    const other = S.tasks.find(x=>x.id===id);
+    const nm = other ? other.name : '其它工作面';
+    (dd[id].p || []).forEach(n=>{ if(!dupMap[n]) dupMap[n] = nm; });
+  });
+
+  if(S.people.length){
+    mPeople.innerHTML = S.people.map(n=>{
+      const on = (rec.p||[]).indexOf(n) > -1 ? ' active' : '';
+      const isDup = !!dupMap[n];
+      const tag = isDup ? '<span class="dupTag">已在 '+esc(dupMap[n])+'</span>' : '';
+      return '<button class="pbtn'+on+(isDup?' dup':'')+'" data-n="'+esc(n)+'">'+esc(n)+tag+'</button>';
+    }).join('');
+  }else{
+    mPeople.innerHTML = '<div class="ph">请先到「设置」添加人员</div>';
+  }
+
+  const drvOpts = [''].concat(S.drivers);
+  mDrivers.innerHTML = drvOpts.map(d0=>{
+    const label = d0 ? d0 : '不安排';
+    return '<button class="dbtn'+(rec.d===d0?' active':'')+'" data-d="'+esc(d0)+'">'+esc(label)+'</button>';
+  }).join('');
+
+  mask.hidden = false;
+}
+function closeModal(){ mask.hidden = true; ctx = null; }
+
+mPeople.addEventListener('click', e=>{
+  const b = e.target.closest('.pbtn');
+  if(!b) return;
+  b.classList.toggle('active');
+});
+mDrivers.addEventListener('click', e=>{
+  const b = e.target.closest('.dbtn');
+  if(!b) return;
+  mDrivers.querySelectorAll('.dbtn').forEach(x=>x.classList.remove('active'));
+  b.classList.add('active');
+});
+
+document.getElementById('mClose').addEventListener('click', closeModal);
+mask.addEventListener('click', e=>{ if(e.target === mask) closeModal(); });
+
+document.getElementById('mClear').addEventListener('click', ()=>{
+  mPeople.querySelectorAll('.pbtn').forEach(x=>x.classList.remove('active'));
+  mDrivers.querySelectorAll('.dbtn').forEach((x,i)=> x.classList.toggle('active', i===0));
+});
+
+document.getElementById('mPrev').addEventListener('click', ()=>{
+  if(!ctx) return;
+  const day = parseInt(ctx.k.split('-')[2], 10);
+  const prev = new Date(curY, curM, day - 1);
+  const pk = prev.getFullYear()+'-'+pad2(prev.getMonth()+1)+'-'+pad2(prev.getDate());
+  const rec = (S.data[pk]||{})[ctx.tid];
+  if(!rec){ alert('前一天这个工作面没有记录'); return; }
+  const ps = rec.p || [];
+  mPeople.querySelectorAll('.pbtn').forEach(b=>{
+    b.classList.toggle('active', ps.indexOf(b.dataset.n) > -1);
+  });
+  mDrivers.querySelectorAll('.dbtn').forEach(b=>{
+    b.classList.toggle('active', (rec.d||'') === b.dataset.d);
+  });
+});
+
+document.getElementById('mSave').addEventListener('click', ()=>{
+  if(!ctx) return;
+  const sel = Array.from(mPeople.querySelectorAll('.pbtn.active')).map(b=>b.dataset.n);
+  const drvBtn = mDrivers.querySelector('.dbtn.active');
+  const drv = drvBtn ? drvBtn.dataset.d : '';
+
+  const dups = sel.filter(n=> dupMap[n]);
+  if(dups.length){
+    const lines = dups.map(n=> n + '（已在「' + dupMap[n] + '」）').join('\n');
+    if(!confirm('同一天里，下面这些人员已经排在别的工作面了：\n\n' + lines + '\n\n还要继续保存吗？')) return;
+  }
+
+  if(!S.data[ctx.k]) S.data[ctx.k] = {};
+  if(!sel.length && !drv){
+    delete S.data[ctx.k][ctx.tid];
+  }else{
+    S.data[ctx.k][ctx.tid] = {p: sel, d: drv};
+  }
+  if(!Object.keys(S.data[ctx.k]).length) delete S.data[ctx.k];
+
+  save();
+  closeModal();
+  renderTable();
+  renderStats();
+});
+
+/* ====== 统计 ====== */
+function renderStats(){
+  const pre = curY + '-' + pad2(curM+1) + '-';
+  document.getElementById('statMonth').textContent = curY + '年' + (curM+1) + '月';
+
+  const pc = {};
+  S.people.forEach(n=> pc[n] = {days:0, tasks:{}});
+  const dc = {};
+  S.drivers.forEach(n=> dc[n] = 0);
+  let assignedDays = 0;
+
+  Object.keys(S.data).forEach(k=>{
+    if(k.indexOf(pre) !== 0) return;
+    Object.keys(S.data[k]).forEach(tid=>{
+      const rec = S.data[k][tid];
+      if(!rec) return;
+      assignedDays++;
+      const t = S.tasks.find(x=>x.id===tid);
+      const tn = t ? t.name : '已删除工作面';
+      (rec.p||[]).forEach(n=>{
+        if(!pc[n]) pc[n] = {days:0, tasks:{}};
+        pc[n].days++;
+        pc[n].tasks[tn] = (pc[n].tasks[tn]||0) + 1;
+      });
+      if(rec.d) dc[rec.d] = (dc[rec.d]||0) + 1;
+    });
+  });
+
+  const peopleRows = S.people.map(n=>{
+    const c = pc[n] || {days:0, tasks:{}};
+    const detail = Object.keys(c.tasks).map(t=>esc(t)+' '+c.tasks[t]).join('、') || '—';
+    return '<tr><td>'+esc(n)+'</td><td>'+c.days+'</td><td style="font-size:12.5px;color:#6c7b7f">'+detail+'</td></tr>';
+  }).join('');
+
+  document.getElementById('statPeople').innerHTML = S.people.length
+    ? '<table class="stat"><thead><tr><th>姓名</th><th>班次</th><th>分布</th></tr></thead><tbody>'+peopleRows+'</tbody></table>'
+    : '<div class="empty">还没有人员</div>';
+
+  const drvRows = S.drivers.map(n=>
+    '<tr><td>'+esc(n)+'</td><td>'+(dc[n]||0)+'</td></tr>'
+  ).join('');
+  document.getElementById('statDrivers').innerHTML = S.drivers.length
+    ? '<table class="stat"><thead><tr><th>司机 / 车辆</th><th>出车次数</th></tr></thead><tbody>'+drvRows+'</tbody></table>'
+    : '<div class="empty">还没有司机</div>';
+}
+
+/* ====== 设置 ====== */
+function renderSettings(){
+  document.getElementById('listPeople').innerHTML = S.people.length
+    ? S.people.map((n,i)=>'<span class="tagItem">'+esc(n)+'<button data-kind="p" data-i="'+i+'">×</button></span>').join('')
+    : '<span class="ph">暂无人员</span>';
+
+  document.getElementById('listDrivers').innerHTML = S.drivers.length
+    ? S.drivers.map((n,i)=>'<span class="tagItem">'+esc(n)+'<button data-kind="d" data-i="'+i+'">×</button></span>').join('')
+    : '<span class="ph">暂无司机</span>';
+
+  document.getElementById('listTasks').innerHTML = S.tasks.length
+    ? S.tasks.map((t,i)=> t.off
+        ? '<span class="tagItem offTagItem">'+esc(t.name)+'<span class="offMark" style="display:inline;margin:0 6px 0 6px">已移除</span><button class="restore" data-kind="r" data-i="'+i+'">恢复</button></span>'
+        : '<span class="tagItem">'+esc(t.name)+'<button data-kind="t" data-i="'+i+'">×</button></span>').join('')
+    : '<span class="ph">暂无作业内容</span>';
+}
+
+document.getElementById('v-set').addEventListener('click', e=>{
+  const b = e.target.closest('button[data-kind]');
+  if(!b) return;
+  const kind = b.dataset.kind, i = parseInt(b.dataset.i,10);
+  if(kind === 'p'){
+    const name = S.people[i];
+    if(!confirm('删除人员「'+name+'」？已排的班次也会一并清掉。')) return;
+    S.people.splice(i,1);
+    Object.keys(S.data).forEach(k=>{
+      Object.keys(S.data[k]).forEach(tid=>{
+        const rec = S.data[k][tid];
+        if(rec && rec.p) rec.p = rec.p.filter(x=>x !== name);
+        if(rec && !(rec.p||[]).length && !rec.d) delete S.data[k][tid];
+      });
+      if(!Object.keys(S.data[k]).length) delete S.data[k];
+    });
+  }else if(kind === 'd'){
+    const name = S.drivers[i];
+    if(!confirm('删除司机「'+name+'」？')) return;
+    S.drivers.splice(i,1);
+    Object.keys(S.data).forEach(k=>{
+      Object.keys(S.data[k]).forEach(tid=>{
+        if(S.data[k][tid] && S.data[k][tid].d === name) S.data[k][tid].d = '';
+      });
+    });
+  }else if(kind === 'r'){
+    const t = S.tasks[i];
+    if(!t) return;
+    t.off = false;
+    S.tasks.splice(i,1);
+    const firstOff = S.tasks.findIndex(x=>x.off);
+    if(firstOff === -1) S.tasks.push(t); else S.tasks.splice(firstOff,0,t);
+  }else{
+    const t = S.tasks[i];
+    if(!confirm('把作业内容「'+t.name+'」移到最后一列？已有排班记录全部保留。')) return;
+    S.tasks.splice(i,1);
+    t.off = true;
+    S.tasks.push(t);
+  }
+  save(); renderSettings(); renderTable(); renderStats();
+});
+
+function bindAdd(inputId, btnId, kind){
+  const run = ()=>{
+    const el = document.getElementById(inputId);
+    const v = el.value.trim();
+    if(!v){ el.focus(); return; }
+    if(kind === 'p'){
+      if(S.people.indexOf(v) > -1){ alert('这个人员已经在名单里了'); return; }
+      S.people.push(v);
+    }else if(kind === 'd'){
+      if(S.drivers.indexOf(v) > -1){ alert('这个司机已经在名单里了'); return; }
+      S.drivers.push(v);
+    }else{
+      if(S.tasks.some(t=>t.name === v)){ alert('这个作业内容已存在'); return; }
+      const nt = {id:'t'+Date.now()+Math.floor(Math.random()*1000), name:v};
+      const firstOff = S.tasks.findIndex(x=>x.off);
+      if(firstOff === -1) S.tasks.push(nt); else S.tasks.splice(firstOff,0,nt);
+    }
+    el.value = '';
+    save(); renderSettings(); renderTable(); renderStats();
+  };
+  document.getElementById(btnId).addEventListener('click', run);
+  document.getElementById(inputId).addEventListener('keydown', e=>{ if(e.key === 'Enter') run(); });
+}
+bindAdd('inPerson','btnAddPerson','p');
+bindAdd('inDriver','btnAddDriver','d');
+bindAdd('inTask','btnAddTask','t');
+
+/* ====== 导出 / 备份 ====== */
+function download(name, text, type){
+  const blob = new Blob([text], {type: type || 'text/plain;charset=utf-8'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = name;
+  document.body.appendChild(a);
+  a.click();
+  setTimeout(()=>{ URL.revokeObjectURL(url); a.remove(); }, 1500);
+}
+
+/* 单日导出：只输出这一天有安排的工作面 */
+const expDate = document.getElementById('expDate');
+expDate.value = todayKey();
+
+function dayHasContent(data){
+  let has = false;
+  S.tasks.forEach(t=>{
+    const rec = (data||{})[t.id] || {};
+    if((rec.p||[]).length || rec.d) has = true;
+  });
+  return has;
+}
+
+document.getElementById('btnDayCsv').addEventListener('click', ()=>{
+  const v = expDate.value;
+  if(!v){ alert('请先选择日期'); return; }
+  const ymd = v.split('-');
+  const data = S.data[v] || {};
+  if(!dayHasContent(data)){ alert('这一天还没有排班'); return; }
+  const rows = [['工作面','人员','司机']];
+  S.tasks.forEach(t=>{
+    const rec = data[t.id] || {};
+    if(!(rec.p||[]).length && !rec.d) return;
+    rows.push([t.name + (t.off ? '（已移除）' : ''), (rec.p||[]).join('、'), rec.d || '']);
+  });
+  const csv = rows.map(r=>r.map(x=>'"'+String(x).replace(/"/g,'""')+'"').join(',')).join('\r\n');
+  download('排班_'+ymd[0]+'年'+Number(ymd[1])+'月'+Number(ymd[2])+'日.csv', '\uFEFF'+csv, 'text/csv;charset=utf-8');
+});
+
+function copyText(txt){
+  const fallback = ()=>{
+    const ta = document.createElement('textarea');
+    ta.value = txt; ta.style.position = 'fixed'; ta.style.opacity = '0';
+    document.body.appendChild(ta); ta.select();
+    let ok = false;
+    try{ ok = document.execCommand('copy'); }catch(e){}
+    ta.remove();
+    alert(ok ? '已复制，可直接粘贴到群里' : '复制失败，请长按选择文字');
+  };
+  if(navigator.clipboard && navigator.clipboard.writeText){
+    navigator.clipboard.writeText(txt).then(()=> alert('已复制，可直接粘贴到群里'), fallback);
+  }else{
+    fallback();
+  }
+}
+
+document.getElementById('btnDayText').addEventListener('click', ()=>{
+  const v = expDate.value || todayKey();
+  const ymd = v.split('-');
+  const data = S.data[v] || {};
+  if(!dayHasContent(data)){ alert('这一天还没有排班'); return; }
+  const lines = ['【' + Number(ymd[1]) + '月' + Number(ymd[2]) + '日 工作安排】'];
+  S.tasks.forEach(t=>{
+    const rec = data[t.id] || {};
+    if(!(rec.p||[]).length && !rec.d) return;
+    let s = t.name + (t.off ? '（已移除）' : '') + '：' + ((rec.p||[]).join('、') || '—');
+    if(rec.d) s += '　司机 ' + rec.d;
+    lines.push(s);
+  });
+  copyText(lines.join('\n'));
+});
+
+document.getElementById('btnCsv').addEventListener('click', ()=>{
+  const days = new Date(curY, curM+1, 0).getDate();
+  let head = ['日期'];
+  S.tasks.forEach(t=>{ head.push(t.name + ' 人员'); head.push(t.name + ' 司机'); });
+  const rows = [head.join(',')];
+  for(let d=1; d<=days; d++){
+    const k = dkey(d);
+    const dayData = S.data[k] || {};
+    const line = [ (curM+1) + '月' + d + '日' ];
+    S.tasks.forEach(t=>{
+      const rec = dayData[t.id] || {};
+      line.push((rec.p||[]).join(' '));
+      line.push(rec.d || '');
+    });
+    rows.push(line.map(v=>'"'+String(v).replace(/"/g,'""')+'"').join(','));
+  }
+  download(curY + '年' + (curM+1) + '月排班.csv', '\uFEFF' + rows.join('\r\n'), 'text/csv;charset=utf-8');
+});
+
+document.getElementById('btnBak').addEventListener('click', ()=>{
+  download('排班备份.json', JSON.stringify(S, null, 2), 'application/json');
+});
+
+const fileRestore = document.getElementById('fileRestore');
+document.getElementById('btnRestore').addEventListener('click', ()=> fileRestore.click());
+fileRestore.addEventListener('change', e=>{
+  const f = e.target.files[0];
+  if(!f) return;
+  const rd = new FileReader();
+  rd.onload = ()=>{
+    try{
+      const o = JSON.parse(rd.result);
+      if(!o || !Array.isArray(o.people)) throw new Error('格式不对');
+      S = {
+        people: o.people||[], drivers: o.drivers||[], tasks: o.tasks||[], data: o.data||{}
+      };
+      save(); renderSettings(); renderTable(); renderStats();
+      alert('备份已恢复');
+    }catch(err){
+      alert('恢复失败：文件不是本工具的备份');
+    }
+    fileRestore.value = '';
+  };
+  rd.readAsText(f);
+});
+
+document.getElementById('btnClear').addEventListener('click', ()=>{
+  if(!confirm('清空全部排班记录？人员和作业内容名单会保留。')) return;
+  S.data = {};
+  save(); renderTable(); renderStats();
+});
+
+/* ====== 顶栏：月份与视图 ====== */
+document.getElementById('prevM').addEventListener('click', ()=>{
+  curM--; if(curM < 0){ curM = 11; curY--; }
+  renderTable(); renderStats();
+});
+document.getElementById('nextM').addEventListener('click', ()=>{
+  curM++; if(curM > 11){ curM = 0; curY++; }
+  renderTable(); renderStats();
+});
+
+document.querySelectorAll('.tab').forEach(tab=>{
+  tab.addEventListener('click', ()=>{
+    document.querySelectorAll('.tab').forEach(t=>t.classList.remove('on'));
+    tab.classList.add('on');
+    document.querySelectorAll('.view').forEach(v=>v.classList.remove('on'));
+    document.getElementById('v-' + tab.dataset.view).classList.add('on');
+    if(tab.dataset.view === 'stat') renderStats();
+    if(tab.dataset.view === 'set') renderSettings();
+  });
+});
+
+/* ====== 启动 ====== */
+renderTable();
+renderStats();
+renderSettings();
+</script>
+</body>
+</html>
